@@ -189,7 +189,7 @@ function App() {
   useEffect(() => {
     setHooks(prev => prev.map(h => ({
       ...h,
-      perAccount: accounts.map((_, i) => h.perAccount?.[i] || { visual: '', sound: '' })
+      perAccount: accounts.map((_, i) => h.perAccount?.[i] || { visual: '', sound: '', caption: '' })
     })));
   }, [accounts.length]);
 
@@ -238,7 +238,8 @@ function App() {
     format: 'Feed Post',
     inspiration: '',
     caption: '',
-    perAccount: accounts.map(() => ({ visual: '', sound: '' }))
+    captionMode: 'same',
+    perAccount: accounts.map(() => ({ visual: '', sound: '', caption: '' }))
   }]);
   const removeHook = (i) => setHooks(p => p.filter((_, idx) => idx !== i));
   const updateHook = (i, f, v) => setHooks(p => p.map((h, idx) => idx === i ? { ...h, [f]: v } : h));
@@ -258,7 +259,8 @@ function App() {
       format: 'Feed Post',
       inspiration: '',
       caption: '',
-      perAccount: accounts.map(() => ({ visual: '', sound: '' }))
+      captionMode: 'same',
+      perAccount: accounts.map(() => ({ visual: '', sound: '', caption: '' }))
     }));
     setHooks(p => [...p, ...newHooks]);
     setBulkText('');
@@ -299,7 +301,8 @@ function App() {
         const hook = hooks[hookIdx];
         const postDate = new Date(start);
         postDate.setDate(postDate.getDate() + d);
-        const pa = hook.perAccount?.[i] || { visual: '', sound: '' };
+        const pa = hook.perAccount?.[i] || { visual: '', sound: '', caption: '' };
+        const captionForRow = hook.captionMode === 'separate' ? (pa.caption || '') : (hook.caption || '');
 
         rows.push([
           formatDate(postDate),
@@ -311,7 +314,7 @@ function App() {
           hook.text || '',
           pa.sound || '',
           pa.visual || '',
-          hook.caption || '',
+          captionForRow,
           '', '', '', '', '', ''
         ]);
       }
@@ -587,7 +590,7 @@ function App() {
 
                 {!isCollapsed && (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                       <div>
                         <label className="label">Format</label>
                         <select value={hook.format} onChange={e => updateHook(hi, 'format', e.target.value)}>
@@ -600,9 +603,45 @@ function App() {
                         <label className="label">Inspiration</label>
                         <input type="text" value={hook.inspiration} onChange={e => updateHook(hi, 'inspiration', e.target.value)} placeholder="optional ref" />
                       </div>
-                      <div>
-                        <label className="label">Caption idea</label>
-                        <input type="text" value={hook.caption} onChange={e => updateHook(hi, 'caption', e.target.value)} placeholder="optional" />
+                    </div>
+                    <div className="mb-4">
+                      <label className="label">Caption</label>
+                      <div className="flex gap-2" style={{ alignItems: 'center' }}>
+                        <select
+                          value={hook.captionMode || 'same'}
+                          onChange={e => {
+                            const newMode = e.target.value;
+                            if (newMode === 'separate' && hook.caption) {
+                              setHooks(p => p.map((h, idx) => {
+                                if (idx !== hi) return h;
+                                return {
+                                  ...h,
+                                  captionMode: newMode,
+                                  perAccount: h.perAccount.map(pa => ({ ...pa, caption: pa.caption || h.caption }))
+                                };
+                              }));
+                            } else {
+                              updateHook(hi, 'captionMode', newMode);
+                            }
+                          }}
+                          style={{ width: '200px', flexShrink: 0 }}
+                        >
+                          <option value="same">Same caption for all</option>
+                          <option value="separate">Separate per account</option>
+                        </select>
+                        {(hook.captionMode || 'same') === 'same' ? (
+                          <input
+                            type="text"
+                            value={hook.caption}
+                            onChange={e => updateHook(hi, 'caption', e.target.value)}
+                            placeholder="optional"
+                            style={{ flex: 1 }}
+                          />
+                        ) : (
+                          <span style={{ flex: 1, fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic' }}>
+                            Captions are set per account in the table below.
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -614,7 +653,10 @@ function App() {
                             <tr style={{ color: 'var(--muted)' }}>
                               <th style={{ textAlign: 'left', padding: '4px 12px 4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account</th>
                               <th style={{ textAlign: 'left', padding: '4px 12px 4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visual / Shot</th>
-                              <th style={{ textAlign: 'left', padding: '4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', width: '120px' }}>Sound ID</th>
+                              <th style={{ textAlign: 'left', padding: '4px 12px 4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', width: '120px' }}>Sound ID</th>
+                              {(hook.captionMode || 'same') === 'separate' && (
+                                <th style={{ textAlign: 'left', padding: '4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Caption</th>
+                              )}
                             </tr>
                           </thead>
                           <tbody>
@@ -627,9 +669,14 @@ function App() {
                                 <td style={{ padding: '4px 12px 4px 0' }}>
                                   <input type="text" value={hook.perAccount[ai]?.visual || ''} onChange={e => updatePA(hi, ai, 'visual', e.target.value)} placeholder="filename or description" />
                                 </td>
-                                <td style={{ padding: '4px 0' }}>
+                                <td style={{ padding: '4px 12px 4px 0' }}>
                                   <input type="text" value={hook.perAccount[ai]?.sound || ''} onChange={e => updatePA(hi, ai, 'sound', e.target.value)} placeholder="e.g. 1" />
                                 </td>
+                                {(hook.captionMode || 'same') === 'separate' && (
+                                  <td style={{ padding: '4px 0' }}>
+                                    <input type="text" value={hook.perAccount[ai]?.caption || ''} onChange={e => updatePA(hi, ai, 'caption', e.target.value)} placeholder="caption for this account" />
+                                  </td>
+                                )}
                               </tr>
                             ))}
                           </tbody>
