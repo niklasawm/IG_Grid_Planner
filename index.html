@@ -120,6 +120,10 @@ const ChevronDown = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9"/></Ico
 const ChevronUp = (p) => <Icon {...p}><polyline points="18 15 12 9 6 15"/></Icon>;
 const FileText = (p) => <Icon {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></Icon>;
 const Info = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></Icon>;
+const Grid = (p) => <Icon {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></Icon>;
+const Users = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
+const PanelLeftOpen = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></Icon>;
+const PanelLeftClose = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></Icon>;
 
 const COLUMN_HEADERS = [
   'Date', 'Creator', 'Account', 'Format', 'Inspiration',
@@ -154,6 +158,8 @@ function App() {
   const [newAccountCreator, setNewAccountCreator] = useState('');
   const [showManageCreators, setShowManageCreators] = useState(false);
   const [showManageAccounts, setShowManageAccounts] = useState(false);
+  const [currentView, setCurrentView] = useState('planner');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -341,8 +347,72 @@ function App() {
   const outputRowCount = output ? output.split('\n').filter(l => l.trim()).length : 0;
 
   return (
-    <div className="font-body" style={{ background: 'var(--bg)', minHeight: '100vh', color: 'var(--text)' }}>
+    <div className="font-body" style={{ background: 'var(--bg)', minHeight: '100vh', color: 'var(--text)', display: 'flex' }}>
+      {/* Sidebar */}
+      <aside style={{
+        width: sidebarOpen ? '220px' : '64px',
+        flexShrink: 0,
+        background: 'var(--card)',
+        borderRight: '1px solid var(--border)',
+        transition: 'width 0.2s ease',
+        position: 'sticky',
+        top: 0,
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '16px 10px'
+      }}>
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="btn-icon"
+          style={{ alignSelf: sidebarOpen ? 'flex-end' : 'center', marginBottom: '16px' }}
+          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+        </button>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {[
+            { id: 'planner', label: 'IG Grid Planner', Icon: Grid },
+            { id: 'manage', label: 'Manage Directory', Icon: Users }
+          ].map(item => {
+            const active = currentView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setCurrentView(item.id)}
+                title={!sidebarOpen ? item.label : ''}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: sidebarOpen ? '10px 12px' : '10px',
+                  justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                  background: active ? 'var(--accent-bg)' : 'transparent',
+                  color: active ? 'var(--accent)' : 'var(--text)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: active ? 600 : 500,
+                  fontFamily: 'inherit',
+                  transition: 'background 0.15s',
+                  textAlign: 'left'
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#f5f2ec'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <item.Icon size={18} />
+                {sidebarOpen && <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Main content */}
+      <main style={{ flex: 1, minWidth: 0 }}>
       <div className="max-w-6xl mx-auto px-6 py-8">
+      {currentView === 'planner' && (<>
         <div className="mb-8 pb-6 border-b">
           <h1 className="font-display" style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: '36px', lineHeight: 1.1 }}>IG Grid Planner</h1>
           <p className="mt-2" style={{ color: 'var(--muted)', fontSize: '15px' }}>
@@ -611,9 +681,18 @@ function App() {
             </div>
           </section>
         )}
+      </>)}
+
+      {currentView === 'manage' && (<>
+        <div className="mb-8 pb-6 border-b">
+          <h1 className="font-display" style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: '36px', lineHeight: 1.1 }}>Manage Directory</h1>
+          <p className="mt-2" style={{ color: 'var(--muted)', fontSize: '15px' }}>
+            Add or remove creators and their accounts. Changes here update the dropdowns in the planner.
+          </p>
+        </div>
 
         <section className="mb-8">
-          <div className="card p-5" style={{ maxWidth: '640px' }}>
+          <div className="card p-5">
             <h2 className="font-display mb-4" style={{ fontWeight: 600, fontSize: '18px' }}>Directory</h2>
 
             <div className="mb-4">
@@ -713,11 +792,13 @@ function App() {
             )}
           </div>
         </section>
+      </>)}
 
         <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '12px', paddingBottom: '24px' }}>
           Your data is auto-saved in this browser. Closing the tab won't lose your work.
         </div>
       </div>
+      </main>
     </div>
   );
 }
