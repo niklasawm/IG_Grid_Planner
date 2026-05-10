@@ -160,6 +160,8 @@ function App() {
   const [showManageAccounts, setShowManageAccounts] = useState(false);
   const [currentView, setCurrentView] = useState('planner');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [wizardCreator, setWizardCreator] = useState('');
+  const [wizardCount, setWizardCount] = useState(3);
 
   useEffect(() => {
     (async () => {
@@ -231,6 +233,32 @@ function App() {
     if (!window.confirm(`Remove ${account} from ${creator}?`)) return;
     setCreatorAccounts(p => ({ ...p, [creator]: (p[creator] || []).filter(a => a !== account) }));
   };
+
+  const startSession = () => {
+    if (!wizardCreator) return;
+    const count = Math.max(1, parseInt(wizardCount) || 1);
+    const newAccounts = Array.from({ length: count }, () => ({
+      creator: wizardCreator,
+      name: '',
+      lastPostDate: ''
+    }));
+    setAccounts(newAccounts);
+    setHooks([]);
+    setOutput('');
+  };
+
+  const resetSession = () => {
+    if (!window.confirm('Reset this session? Accounts, hooks, and output will be cleared so you can start fresh for the next creator. Your directory of creators stays untouched.')) return;
+    setAccounts([]);
+    setHooks([]);
+    setOutput('');
+    setCollapsedHooks({});
+    setWizardCreator('');
+    setWizardCount(3);
+  };
+
+  const accountsComplete = accounts.length > 0 && accounts.every(a => a.creator && a.name && a.lastPostDate);
+  const inWizard = accounts.length === 0;
 
   const addHook = () => setHooks(p => [...p, {
     id: '',
@@ -353,7 +381,7 @@ function App() {
     <div className="font-body" style={{ background: 'var(--bg)', minHeight: '100vh', color: 'var(--text)', display: 'flex' }}>
       {/* Sidebar */}
       <aside style={{
-        width: sidebarOpen ? '220px' : '64px',
+        width: sidebarOpen ? '240px' : '64px',
         flexShrink: 0,
         background: 'var(--card)',
         borderRight: '1px solid var(--border)',
@@ -363,7 +391,8 @@ function App() {
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        padding: '16px 10px'
+        padding: '16px 10px',
+        overflowY: 'auto'
       }}>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -410,6 +439,61 @@ function App() {
             );
           })}
         </nav>
+
+        {sidebarOpen && (
+          <>
+            <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', paddingLeft: '4px' }}>Settings</div>
+              <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div>
+                  <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Stagger (days)
+                    <button onClick={() => setShowStaggerInfo(!showStaggerInfo)} className="btn-icon" style={{ padding: '0' }}>
+                      <Info size={11} />
+                    </button>
+                  </label>
+                  <input type="number" min="0" value={staggerDays} onChange={e => setStaggerDays(parseInt(e.target.value) || 0)} />
+                </div>
+                {showStaggerInfo && (
+                  <div className="info-box" style={{ fontSize: '11px', padding: '8px' }}>
+                    Stagger shifts each account's hook cycle by this many days. With 7 hooks and stagger 4, Account 2 starts with H5 (shifted 4) instead of H1. Use a value smaller than your hook count (and not a multiple of it).
+                  </div>
+                )}
+                <div>
+                  <label className="label">Date format</label>
+                  <select value={dateFormat} onChange={e => setDateFormat(e.target.value)}>
+                    <option value="us">MM/DD/YYYY</option>
+                    <option value="iso">YYYY-MM-DD</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Include headers</label>
+                  <select value={includeHeaders ? 'yes' : 'no'} onChange={e => setIncludeHeaders(e.target.value === 'yes')}>
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', padding: '10px 12px', background: 'var(--bg)', borderRadius: '6px', fontSize: '12px', color: 'var(--muted)', lineHeight: 1.6 }}>
+              <div><strong style={{ color: 'var(--text)' }}>{accounts.length}</strong> accounts · <strong style={{ color: 'var(--text)' }}>{hooks.length}</strong> hooks</div>
+              <div><strong style={{ color: 'var(--accent)' }}>{accounts.filter(a => a.lastPostDate).length * hooks.length}</strong> rows on generate</div>
+            </div>
+
+            <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
+              <button
+                onClick={resetSession}
+                disabled={accounts.length === 0 && hooks.length === 0}
+                className="btn-secondary"
+                style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                title="Clear accounts, hooks, and output"
+              >
+                <RotateCcw size={14} /> Reset session
+              </button>
+            </div>
+          </>
+        )}
       </aside>
 
       {/* Main content */}
@@ -424,113 +508,116 @@ function App() {
         </div>
 
         <section className="mb-8">
-          <div className="card p-5">
-            <h2 className="font-display mb-4" style={{ fontWeight: 600, fontSize: '20px' }}>Settings</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  Stagger (days)
-                  <button onClick={() => setShowStaggerInfo(!showStaggerInfo)} className="btn-icon" style={{ padding: '0' }}>
-                    <Info size={12} />
-                  </button>
-                </label>
-                <input type="number" min="0" value={staggerDays} onChange={e => setStaggerDays(parseInt(e.target.value) || 0)} />
-              </div>
-              <div>
-                <label className="label">Date format</label>
-                <select value={dateFormat} onChange={e => setDateFormat(e.target.value)}>
-                  <option value="iso">YYYY-MM-DD</option>
-                  <option value="us">MM/DD/YYYY</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Include headers</label>
-                <select value={includeHeaders ? 'yes' : 'no'} onChange={e => setIncludeHeaders(e.target.value === 'yes')}>
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
-                </select>
-              </div>
-              <div className="flex items-end">
-                <div style={{ fontSize: '13px', color: 'var(--muted)', lineHeight: 1.6 }}>
-                  <div><strong style={{ color: 'var(--text)' }}>{accounts.length}</strong> accounts · <strong style={{ color: 'var(--text)' }}>{hooks.length}</strong> hooks</div>
-                  <div><strong style={{ color: 'var(--accent)' }}>{accounts.filter(a => a.lastPostDate).length * hooks.length}</strong> rows on generate</div>
+          {inWizard ? (
+            <div className="card p-5" style={{ maxWidth: '560px' }}>
+              <h2 className="font-display mb-2" style={{ fontWeight: 600, fontSize: '22px' }}>Start a new session</h2>
+              <p style={{ color: 'var(--muted)', fontSize: '14px', marginBottom: '20px', lineHeight: 1.5 }}>
+                Pick which creator you're planning content for and how many of their accounts to include.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="label">Creator</label>
+                  <select value={wizardCreator} onChange={e => setWizardCreator(e.target.value)} autoFocus>
+                    <option value="">Select creator…</option>
+                    {creators.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Number of accounts</label>
+                  <input type="number" min="1" max="20" value={wizardCount} onChange={e => setWizardCount(parseInt(e.target.value) || 1)} />
                 </div>
               </div>
-            </div>
-            {showStaggerInfo && (
-              <div className="info-box mt-4">
-                <strong>How stagger works:</strong> Account 1 posts hooks H1 → HN in order starting the day after its last post.
-                Account 2 posts the SAME hooks in the SAME order but cyclically offset by the stagger amount — so if you have 7 hooks and stagger=4,
-                Account 2 starts with H5 (then H6, H7, H1, H2, H3, H4). Each account follows its own start date.
-                The same hook appears across all accounts on different days, spaced out.
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display" style={{ fontWeight: 600, fontSize: '20px' }}>Accounts</h2>
-            <button onClick={addAccount} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Plus size={14} /> Add account
-            </button>
-          </div>
-          {accounts.length === 0 ? (
-            <div className="card p-6 text-center" style={{ color: 'var(--muted)' }}>
-              No accounts yet. Click "Add account" to start.
+              <button
+                onClick={startSession}
+                disabled={!wizardCreator || wizardCount < 1}
+                className="btn-primary"
+              >
+                Continue →
+              </button>
+              {creators.length === 0 && (
+                <p style={{ marginTop: '12px', fontSize: '12px', color: 'var(--muted)' }}>
+                  No creators in the directory yet. Add one under <strong>Manage Directory</strong> in the sidebar.
+                </p>
+              )}
             </div>
           ) : (
-            <div className="space-y-2">
-              {accounts.map((acc, i) => (
-                <div key={i} className="card p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                    <div className="md:col-span-1" style={{ textAlign: 'center' }}>
-                      <div className="label">#</div>
-                      <div className="font-display" style={{ color: 'var(--accent)', fontSize: '20px', fontWeight: 600 }}>{i + 1}</div>
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-display" style={{ fontWeight: 600, fontSize: '20px' }}>Accounts</h2>
+                <button onClick={addAccount} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Plus size={14} /> Add account
+                </button>
+              </div>
+              <div className="info-box mb-4">
+                <strong>Check each account's last post date individually</strong> — they're different per account. Open Instagram for each handle and use the date of its most recent post.
+              </div>
+              <div className="space-y-2">
+                {accounts.map((acc, i) => {
+                  const nameEmpty = !acc.name;
+                  const dateEmpty = !acc.lastPostDate;
+                  return (
+                    <div key={i} className="card p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div className="md:col-span-1" style={{ textAlign: 'center' }}>
+                          <div className="label">#</div>
+                          <div className="font-display" style={{ color: 'var(--accent)', fontSize: '20px', fontWeight: 600 }}>{i + 1}</div>
+                        </div>
+                        <div className="md:col-span-3">
+                          <label className="label">Creator</label>
+                          <select
+                            value={acc.creator}
+                            onChange={e => setAccounts(p => p.map((a, idx) => idx === i ? { ...a, creator: e.target.value, name: '' } : a))}
+                          >
+                            <option value="">Select creator</option>
+                            {creators.map(c => <option key={c} value={c}>{c}</option>)}
+                            {acc.creator && !creators.includes(acc.creator) && (
+                              <option value={acc.creator}>{acc.creator} (legacy)</option>
+                            )}
+                          </select>
+                        </div>
+                        <div className="md:col-span-4">
+                          <label className="label" style={{ color: nameEmpty ? 'var(--accent)' : undefined }}>
+                            Account {nameEmpty && '· fill this'}
+                          </label>
+                          <select
+                            value={acc.name}
+                            onChange={e => updateAccount(i, 'name', e.target.value)}
+                            disabled={!acc.creator}
+                            style={{ borderColor: nameEmpty ? 'var(--accent)' : undefined }}
+                          >
+                            <option value="">{acc.creator ? 'Select account' : 'Choose creator first'}</option>
+                            {(creatorAccounts[acc.creator] || []).map(n => <option key={n} value={n}>{n}</option>)}
+                            {acc.name && acc.creator && !(creatorAccounts[acc.creator] || []).includes(acc.name) && (
+                              <option value={acc.name}>{acc.name} (legacy)</option>
+                            )}
+                          </select>
+                        </div>
+                        <div className="md:col-span-3">
+                          <label className="label" style={{ color: dateEmpty ? 'var(--accent)' : undefined }}>
+                            Last post date {dateEmpty && '· fill this'}
+                          </label>
+                          <input
+                            type="date"
+                            value={acc.lastPostDate}
+                            onChange={e => updateAccount(i, 'lastPostDate', e.target.value)}
+                            style={{ borderColor: dateEmpty ? 'var(--accent)' : undefined }}
+                          />
+                        </div>
+                        <div className="md:col-span-1" style={{ textAlign: 'right' }}>
+                          <button onClick={() => removeAccount(i)} className="btn-icon" title="Remove">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="md:col-span-3">
-                      <label className="label">Creator</label>
-                      <select
-                        value={acc.creator}
-                        onChange={e => setAccounts(p => p.map((a, idx) => idx === i ? { ...a, creator: e.target.value, name: '' } : a))}
-                      >
-                        <option value="">Select creator</option>
-                        {creators.map(c => <option key={c} value={c}>{c}</option>)}
-                        {acc.creator && !creators.includes(acc.creator) && (
-                          <option value={acc.creator}>{acc.creator} (legacy)</option>
-                        )}
-                      </select>
-                    </div>
-                    <div className="md:col-span-4">
-                      <label className="label">Account</label>
-                      <select
-                        value={acc.name}
-                        onChange={e => updateAccount(i, 'name', e.target.value)}
-                        disabled={!acc.creator}
-                      >
-                        <option value="">{acc.creator ? 'Select account' : 'Choose creator first'}</option>
-                        {(creatorAccounts[acc.creator] || []).map(n => <option key={n} value={n}>{n}</option>)}
-                        {acc.name && acc.creator && !(creatorAccounts[acc.creator] || []).includes(acc.name) && (
-                          <option value={acc.name}>{acc.name} (legacy)</option>
-                        )}
-                      </select>
-                    </div>
-                    <div className="md:col-span-3">
-                      <label className="label">Last post date</label>
-                      <input type="date" value={acc.lastPostDate} onChange={e => updateAccount(i, 'lastPostDate', e.target.value)} />
-                    </div>
-                    <div className="md:col-span-1" style={{ textAlign: 'right' }}>
-                      <button onClick={() => removeAccount(i)} className="btn-icon" title="Remove">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </section>
 
+        {accountsComplete && (<>
         <section className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display" style={{ fontWeight: 600, fontSize: '20px' }}>Hooks</h2>
@@ -695,6 +782,7 @@ function App() {
             Generate rows →
           </button>
         </div>
+        </>)}
 
         {output && (
           <section className="mb-12">
