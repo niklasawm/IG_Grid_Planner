@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reels Planner — AWM</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'DM Sans', system-ui, -apple-system, sans-serif; }
+  :root {
+    --bg: #faf8f4;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e8e4dc;
+    --border-strong: #d4cfc4;
+    --accent: #c2410c;
+    --accent-soft: #fed7aa;
+    --accent-bg: #fff7ed;
+  }
+  .font-display { font-family: 'Fraunces', Georgia, serif; }
+  .font-body { font-family: 'DM Sans', system-ui, -apple-system, sans-serif; }
+  input, select, textarea, button { font-family: inherit; font-size: 14px; }
+  input[type="text"], input[type="date"], input[type="number"], textarea, select {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text);
+    transition: border-color 0.15s;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  .label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: block; }
+  .btn-primary { background: var(--accent); color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; transition: opacity 0.15s; font-size: 14px; border: none; cursor: pointer; }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: var(--card); color: var(--text); padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border-strong); font-weight: 500; font-size: 13px; transition: background 0.15s; cursor: pointer; }
+  .btn-secondary:hover { background: #f5f2ec; }
+  .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-icon { padding: 6px; color: var(--muted); border-radius: 4px; transition: all 0.15s; background: none; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .btn-icon:hover { color: var(--accent); background: var(--accent-bg); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+  .info-box { background: var(--accent-bg); border: 1px solid var(--accent-soft); border-radius: 6px; padding: 12px; font-size: 13px; color: #7c2d12; }
+
+  .max-w-6xl { max-width: 72rem; }
+  .mx-auto { margin-left: auto; margin-right: auto; }
+  .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+  .py-8 { padding-top: 2rem; padding-bottom: 2rem; }
+  .mb-8 { margin-bottom: 2rem; }
+  .mb-4 { margin-bottom: 1rem; }
+  .mb-3 { margin-bottom: 0.75rem; }
+  .mb-2 { margin-bottom: 0.5rem; }
+  .mb-12 { margin-bottom: 3rem; }
+  .mt-2 { margin-top: 0.5rem; }
+  .mt-3 { margin-top: 0.75rem; }
+  .mt-4 { margin-top: 1rem; }
+  .pb-6 { padding-bottom: 1.5rem; }
+  .p-4 { padding: 1rem; }
+  .p-5 { padding: 1.25rem; }
+  .p-6 { padding: 1.5rem; }
+  .border-b { border-bottom: 1px solid var(--border); }
+  .flex { display: flex; }
+  .grid { display: grid; }
+  .items-center { align-items: center; }
+  .items-end { align-items: flex-end; }
+  .justify-between { justify-content: space-between; }
+  .justify-center { justify-content: center; }
+  .gap-2 { gap: 0.5rem; }
+  .gap-3 { gap: 0.75rem; }
+  .gap-4 { gap: 1rem; }
+  .space-y-2 > * + * { margin-top: 0.5rem; }
+  .text-center { text-align: center; }
+  .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  @media (min-width: 768px) {
+    .md\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .md\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .md\\:grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .md\\:col-span-1 { grid-column: span 1 / span 1; }
+    .md\\:col-span-3 { grid-column: span 3 / span 3; }
+    .md\\:col-span-4 { grid-column: span 4 / span 4; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+// localStorage shim (so window.storage works whether in Claude or standalone)
+if (!window.storage) {
+  window.storage = {
+    get: async (key) => {
+      try {
+        const v = localStorage.getItem(key);
+        return v ? { value: v } : null;
+      } catch { return null; }
+    },
+    set: async (key, value) => {
+      try { localStorage.setItem(key, value); return { value }; } catch { return null; }
+    }
+  };
+}
+
+// Inline SVG icons (replacing lucide-react)
+const Icon = ({ children, size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+);
+const Plus = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>;
+const Trash2 = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></Icon>;
+const Copy = (p) => <Icon {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></Icon>;
+const Check = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon>;
+const RotateCcw = (p) => <Icon {...p}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></Icon>;
+const ChevronDown = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9"/></Icon>;
+const ChevronUp = (p) => <Icon {...p}><polyline points="18 15 12 9 6 15"/></Icon>;
+const FileText = (p) => <Icon {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></Icon>;
+const Info = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></Icon>;
+
+const COLUMN_HEADERS = [
+  'Date', 'Creator', 'Account', 'Format', 'Inspiration',
+  'Hook ID', 'Hook Text', 'Sound ID', 'Visual Source / Shot',
+  'Caption Idea', 'Status', 'Post ID',
+  'Facebook Date', 'Facebook Account', 'Facebook Status', 'Facebook Notes'
+];
+
+const STORAGE_KEY = 'awm-reels-planner-v1';
+
+function App() {
+  const [staggerDays, setStaggerDays] = useState(4);
+  const [includeHeaders, setIncludeHeaders] = useState(false);
+  const [dateFormat, setDateFormat] = useState('iso');
+  const [accounts, setAccounts] = useState([]);
+  const [hooks, setHooks] = useState([]);
+  const [output, setOutput] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [collapsedHooks, setCollapsedHooks] = useState({});
+  const [showStaggerInfo, setShowStaggerInfo] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get(STORAGE_KEY);
+        if (r?.value) {
+          const s = JSON.parse(r.value);
+          if (typeof s.staggerDays === 'number') setStaggerDays(s.staggerDays);
+          if (typeof s.includeHeaders === 'boolean') setIncludeHeaders(s.includeHeaders);
+          if (s.dateFormat) setDateFormat(s.dateFormat);
+          if (Array.isArray(s.accounts)) setAccounts(s.accounts);
+          if (Array.isArray(s.hooks)) setHooks(s.hooks);
+        }
+      } catch (e) {}
+      setLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const state = { staggerDays, includeHeaders, dateFormat, accounts, hooks };
+    window.storage.set(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
+  }, [staggerDays, includeHeaders, dateFormat, accounts, hooks, loaded]);
+
+  useEffect(() => {
+    setHooks(prev => prev.map(h => ({
+      ...h,
+      perAccount: accounts.map((_, i) => h.perAccount?.[i] || { visual: '', sound: '' })
+    })));
+  }, [accounts.length]);
+
+  const addAccount = () => setAccounts(p => [...p, { creator: '', name: '', lastPostDate: '' }]);
+  const removeAccount = (i) => {
+    setAccounts(p => p.filter((_, idx) => idx !== i));
+    setHooks(p => p.map(h => ({ ...h, perAccount: h.perAccount.filter((_, idx) => idx !== i) })));
+  };
+  const updateAccount = (i, f, v) => setAccounts(p => p.map((a, idx) => idx === i ? { ...a, [f]: v } : a));
+
+  const addHook = () => setHooks(p => [...p, {
+    id: '',
+    text: '',
+    format: 'Feed Post',
+    inspiration: '',
+    caption: '',
+    perAccount: accounts.map(() => ({ visual: '', sound: '' }))
+  }]);
+  const removeHook = (i) => setHooks(p => p.filter((_, idx) => idx !== i));
+  const updateHook = (i, f, v) => setHooks(p => p.map((h, idx) => idx === i ? { ...h, [f]: v } : h));
+  const updatePA = (hi, ai, f, v) => setHooks(p => p.map((h, idx) => {
+    if (idx !== hi) return h;
+    const pa = [...h.perAccount];
+    pa[ai] = { ...pa[ai], [f]: v };
+    return { ...h, perAccount: pa };
+  }));
+
+  const handleBulkAdd = () => {
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length === 0) return;
+    const newHooks = lines.map((text) => ({
+      id: '',
+      text,
+      format: 'Feed Post',
+      inspiration: '',
+      caption: '',
+      perAccount: accounts.map(() => ({ visual: '', sound: '' }))
+    }));
+    setHooks(p => [...p, ...newHooks]);
+    setBulkText('');
+    setBulkOpen(false);
+  };
+
+  const formatDate = (date) => {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return dateFormat === 'us' ? `${mm}/${dd}/${yyyy}` : `${yyyy}-${mm}-${dd}`;
+  };
+
+  const generate = () => {
+    const validAccounts = accounts.filter(a => a.lastPostDate);
+    if (validAccounts.length === 0) { setOutput('⚠ At least one account needs a "last post date" set.'); return; }
+    if (hooks.length === 0) { setOutput('⚠ Add at least one hook.'); return; }
+
+    const N = hooks.length;
+    const S = parseInt(staggerDays) || 0;
+
+    if (S > 0 && validAccounts.length > 1 && S % N === 0) {
+      const suggestion = N === 2 ? 'a stagger of 1' : `a stagger of 1 to ${N - 1}`;
+      setOutput(`⚠ Stagger of ${S} with ${N} hook${N !== 1 ? 's' : ''} doesn't actually stagger anything — ${S} is a multiple of ${N}, so every account ends up posting the same hook on the same day of its own run. Use ${suggestion}, or add more hooks.`);
+      return;
+    }
+
+    const rows = [];
+
+    accounts.forEach((acc, i) => {
+      if (!acc.lastPostDate) return;
+      const offset = ((i * S) % N + N) % N;
+      const start = new Date(acc.lastPostDate + 'T00:00:00');
+      start.setDate(start.getDate() + 1);
+
+      for (let d = 0; d < N; d++) {
+        const hookIdx = ((d - offset) % N + N) % N;
+        const hook = hooks[hookIdx];
+        const postDate = new Date(start);
+        postDate.setDate(postDate.getDate() + d);
+        const pa = hook.perAccount?.[i] || { visual: '', sound: '' };
+
+        rows.push([
+          formatDate(postDate),
+          acc.creator || '',
+          acc.name || '',
+          hook.format || 'Feed Post',
+          hook.inspiration || '',
+          hook.id || '',
+          hook.text || '',
+          pa.sound || '',
+          pa.visual || '',
+          hook.caption || '',
+          '', '', '', '', '', ''
+        ]);
+      }
+    });
+
+    rows.sort((a, b) => {
+      const da = new Date(a[0]);
+      const db = new Date(b[0]);
+      if (da - db !== 0) return da - db;
+      return a[2].localeCompare(b[2]);
+    });
+
+    let tsv = rows.map(r => r.join('\t')).join('\n');
+    if (includeHeaders) tsv = COLUMN_HEADERS.join('\t') + '\n' + tsv;
+    setOutput(tsv);
+  };
+
+  const copyOutput = async () => {
+    try {
+      await navigator.clipboard.writeText(output);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {}
+  };
+
+  const clearHooks = () => {
+    if (!window.confirm('Clear all hooks? (Accounts will be kept.)')) return;
+    setHooks([]);
+    setOutput('');
+    setCollapsedHooks({});
+  };
+
+  const outputRowCount = output ? output.split('\n').filter(l => l.trim()).length : 0;
+
+  return (
+    <div className="font-body" style={{ background: 'var(--bg)', minHeight: '100vh', color: 'var(--text)' }}>
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="mb-8 pb-6 border-b">
+          <h1 className="font-display" style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: '36px', lineHeight: 1.1 }}>Reels Planner</h1>
+          <p className="mt-2" style={{ color: 'var(--muted)', fontSize: '15px' }}>
+            Stagger hooks across accounts, generate paste-ready rows for the content sheet.
+          </p>
+        </div>
+
+        <section className="mb-8">
+          <div className="card p-5">
+            <h2 className="font-display mb-4" style={{ fontWeight: 600, fontSize: '20px' }}>Settings</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  Stagger (days)
+                  <button onClick={() => setShowStaggerInfo(!showStaggerInfo)} className="btn-icon" style={{ padding: '0' }}>
+                    <Info size={12} />
+                  </button>
+                </label>
+                <input type="number" min="0" value={staggerDays} onChange={e => setStaggerDays(parseInt(e.target.value) || 0)} />
+              </div>
+              <div>
+                <label className="label">Date format</label>
+                <select value={dateFormat} onChange={e => setDateFormat(e.target.value)}>
+                  <option value="iso">YYYY-MM-DD</option>
+                  <option value="us">MM/DD/YYYY</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Include headers</label>
+                <select value={includeHeaders ? 'yes' : 'no'} onChange={e => setIncludeHeaders(e.target.value === 'yes')}>
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <div style={{ fontSize: '13px', color: 'var(--muted)', lineHeight: 1.6 }}>
+                  <div><strong style={{ color: 'var(--text)' }}>{accounts.length}</strong> accounts · <strong style={{ color: 'var(--text)' }}>{hooks.length}</strong> hooks</div>
+                  <div><strong style={{ color: 'var(--accent)' }}>{accounts.filter(a => a.lastPostDate).length * hooks.length}</strong> rows on generate</div>
+                </div>
+              </div>
+            </div>
+            {showStaggerInfo && (
+              <div className="info-box mt-4">
+                <strong>How stagger works:</strong> Account 1 posts hooks H1 → HN in order starting the day after its last post.
+                Account 2 posts the SAME hooks in the SAME order but cyclically offset by the stagger amount — so if you have 7 hooks and stagger=4,
+                Account 2 starts with H5 (then H6, H7, H1, H2, H3, H4). Each account follows its own start date.
+                The same hook appears across all accounts on different days, spaced out.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display" style={{ fontWeight: 600, fontSize: '20px' }}>Accounts</h2>
+            <button onClick={addAccount} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={14} /> Add account
+            </button>
+          </div>
+          {accounts.length === 0 ? (
+            <div className="card p-6 text-center" style={{ color: 'var(--muted)' }}>
+              No accounts yet. Click "Add account" to start.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {accounts.map((acc, i) => (
+                <div key={i} className="card p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    <div className="md:col-span-1" style={{ textAlign: 'center' }}>
+                      <div className="label">#</div>
+                      <div className="font-display" style={{ color: 'var(--accent)', fontSize: '20px', fontWeight: 600 }}>{i + 1}</div>
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="label">Creator</label>
+                      <input type="text" value={acc.creator} onChange={e => updateAccount(i, 'creator', e.target.value)} placeholder="e.g. Sydney" />
+                    </div>
+                    <div className="md:col-span-4">
+                      <label className="label">Account name</label>
+                      <input type="text" value={acc.name} onChange={e => updateAccount(i, 'name', e.target.value)} placeholder="e.g. @sydneymain" />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="label">Last post date</label>
+                      <input type="date" value={acc.lastPostDate} onChange={e => updateAccount(i, 'lastPostDate', e.target.value)} />
+                    </div>
+                    <div className="md:col-span-1" style={{ textAlign: 'right' }}>
+                      <button onClick={() => removeAccount(i)} className="btn-icon" title="Remove">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display" style={{ fontWeight: 600, fontSize: '20px' }}>Hooks</h2>
+            <div className="flex gap-2">
+              <button onClick={() => setBulkOpen(!bulkOpen)} className="btn-secondary" disabled={accounts.length === 0} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <FileText size={14} /> Bulk add
+              </button>
+              <button onClick={addHook} className="btn-secondary" disabled={accounts.length === 0} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Plus size={14} /> Add hook
+              </button>
+              {hooks.length > 0 && (
+                <button onClick={clearHooks} className="btn-icon" title="Clear all hooks">
+                  <RotateCcw size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {bulkOpen && (
+            <div className="card p-4 mb-3">
+              <label className="label">Paste hooks (one per line)</label>
+              <textarea rows={6} value={bulkText} onChange={e => setBulkText(e.target.value)}
+                placeholder="POV: he asked me to twirl for him&#10;Tell me you grew up in Texas without telling me..." />
+              <div className="flex gap-2 mt-3">
+                <button onClick={handleBulkAdd} className="btn-primary">Add hooks</button>
+                <button onClick={() => { setBulkOpen(false); setBulkText(''); }} className="btn-secondary">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {accounts.length === 0 && (
+            <div className="card p-6 text-center" style={{ color: 'var(--muted)' }}>
+              Add at least one account first — each hook needs per-account visual & sound assignments.
+            </div>
+          )}
+
+          {accounts.length > 0 && hooks.length === 0 && (
+            <div className="card p-6 text-center" style={{ color: 'var(--muted)' }}>
+              No hooks yet. Click "Add hook" or use "Bulk add" to paste a list.
+            </div>
+          )}
+
+          {hooks.map((hook, hi) => {
+            const isCollapsed = collapsedHooks[hi];
+            return (
+              <div key={hi} className="card p-4 mb-3">
+                <div className="flex items-center gap-3 mb-3">
+                  <button onClick={() => setCollapsedHooks(c => ({ ...c, [hi]: !c[hi] }))} className="btn-icon">
+                    {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                  </button>
+                  <input type="text" value={hook.id} onChange={e => updateHook(hi, 'id', e.target.value)} placeholder="ID" style={{ width: '90px', flexShrink: 0 }} />
+                  <input type="text" value={hook.text} onChange={e => updateHook(hi, 'text', e.target.value)} placeholder="Hook text..." style={{ flex: 1 }} />
+                  <button onClick={() => removeHook(hi)} className="btn-icon" title="Remove hook">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+
+                {!isCollapsed && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                      <div>
+                        <label className="label">Format</label>
+                        <select value={hook.format} onChange={e => updateHook(hi, 'format', e.target.value)}>
+                          <option value="Feed Post">Feed Post</option>
+                          <option value="Reel">Reel</option>
+                          <option value="Trial Reel">Trial Reel</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label">Inspiration</label>
+                        <input type="text" value={hook.inspiration} onChange={e => updateHook(hi, 'inspiration', e.target.value)} placeholder="optional ref" />
+                      </div>
+                      <div>
+                        <label className="label">Caption idea</label>
+                        <input type="text" value={hook.caption} onChange={e => updateHook(hi, 'caption', e.target.value)} placeholder="optional" />
+                      </div>
+                    </div>
+
+                    {accounts.length > 0 && (
+                      <div>
+                        <div className="label" style={{ marginBottom: '6px' }}>Per account</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                          <thead>
+                            <tr style={{ color: 'var(--muted)' }}>
+                              <th style={{ textAlign: 'left', padding: '4px 12px 4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account</th>
+                              <th style={{ textAlign: 'left', padding: '4px 12px 4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visual / Shot</th>
+                              <th style={{ textAlign: 'left', padding: '4px 0', fontWeight: 500, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', width: '120px' }}>Sound ID</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {accounts.map((acc, ai) => (
+                              <tr key={ai}>
+                                <td style={{ padding: '4px 12px 4px 0', whiteSpace: 'nowrap' }}>
+                                  <span style={{ color: 'var(--muted)', marginRight: '4px' }}>{ai + 1}.</span>
+                                  {acc.name || acc.creator || `Account ${ai + 1}`}
+                                </td>
+                                <td style={{ padding: '4px 12px 4px 0' }}>
+                                  <input type="text" value={hook.perAccount[ai]?.visual || ''} onChange={e => updatePA(hi, ai, 'visual', e.target.value)} placeholder="filename or description" />
+                                </td>
+                                <td style={{ padding: '4px 0' }}>
+                                  <input type="text" value={hook.perAccount[ai]?.sound || ''} onChange={e => updatePA(hi, ai, 'sound', e.target.value)} placeholder="e.g. 1" />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </section>
+
+        <div className="flex justify-center mb-8">
+          <button onClick={generate} className="btn-primary" style={{ fontSize: '16px', padding: '14px 36px' }}>
+            Generate rows →
+          </button>
+        </div>
+
+        {output && (
+          <section className="mb-12">
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="font-display" style={{ fontWeight: 600, fontSize: '20px' }}>Output</h2>
+                  {outputRowCount > 0 && !output.startsWith('⚠') && (
+                    <div style={{ color: 'var(--muted)', fontSize: '12px', marginTop: '2px' }}>
+                      {outputRowCount} row{outputRowCount !== 1 ? 's' : ''} · tab-separated
+                    </div>
+                  )}
+                </div>
+                <button onClick={copyOutput} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  {copied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy to clipboard</>}
+                </button>
+              </div>
+              <div style={{ color: 'var(--muted)', fontSize: '12px', marginBottom: '8px' }}>
+                Paste into your Google Sheet: click the first empty cell in the Date column, then Cmd/Ctrl+V.
+              </div>
+              <textarea
+                rows={Math.min(20, Math.max(6, output.split('\n').length))}
+                value={output}
+                readOnly
+                wrap="off"
+                style={{ fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: '12px', whiteSpace: 'pre', overflowX: 'auto' }}
+              />
+              <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--muted)' }}>
+                <strong style={{ color: 'var(--text)' }}>Columns:</strong> {COLUMN_HEADERS.join(' · ')}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '12px', paddingBottom: '24px' }}>
+          Your data is auto-saved in this browser. Closing the tab won't lose your work.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
