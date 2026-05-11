@@ -90,7 +90,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 // localStorage shim (so window.storage works whether in Claude or standalone)
 if (!window.storage) {
@@ -134,6 +134,27 @@ const COLUMN_HEADERS = [
 
 const STORAGE_KEY = 'awm-reels-planner-v1';
 
+function AutoTextarea({ value, onChange, placeholder, disabled, style, minHeight = 38 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.style.height = 'auto';
+      ref.current.style.height = Math.max(minHeight, ref.current.scrollHeight) + 'px';
+    }
+  }, [value, minHeight]);
+  return (
+    <textarea
+      ref={ref}
+      value={value || ''}
+      onChange={onChange}
+      placeholder={placeholder}
+      disabled={disabled}
+      rows={1}
+      style={{ resize: 'none', overflow: 'hidden', minHeight: minHeight + 'px', lineHeight: 1.4, ...style }}
+    />
+  );
+}
+
 function App() {
   const [staggerDays, setStaggerDays] = useState(4);
   const [includeHeaders, setIncludeHeaders] = useState(false);
@@ -162,6 +183,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [wizardCreator, setWizardCreator] = useState('');
   const [wizardCount, setWizardCount] = useState(3);
+  const [staggerOverridden, setStaggerOverridden] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -176,6 +198,7 @@ function App() {
           if (Array.isArray(s.hooks)) setHooks(s.hooks);
           if (Array.isArray(s.creators)) setCreators(s.creators);
           if (s.creatorAccounts && typeof s.creatorAccounts === 'object') setCreatorAccounts(s.creatorAccounts);
+          if (typeof s.staggerOverridden === 'boolean') setStaggerOverridden(s.staggerOverridden);
         }
       } catch (e) {}
       setLoaded(true);
@@ -184,9 +207,9 @@ function App() {
 
   useEffect(() => {
     if (!loaded) return;
-    const state = { staggerDays, includeHeaders, dateFormat, accounts, hooks, creators, creatorAccounts };
+    const state = { staggerDays, includeHeaders, dateFormat, accounts, hooks, creators, creatorAccounts, staggerOverridden };
     window.storage.set(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
-  }, [staggerDays, includeHeaders, dateFormat, accounts, hooks, creators, creatorAccounts, loaded]);
+  }, [staggerDays, includeHeaders, dateFormat, accounts, hooks, creators, creatorAccounts, staggerOverridden, loaded]);
 
   useEffect(() => {
     setHooks(prev => prev.map(h => ({
@@ -255,10 +278,53 @@ function App() {
     setCollapsedHooks({});
     setWizardCreator('');
     setWizardCount(3);
+    setStaggerOverridden(false);
   };
 
   const accountsComplete = accounts.length > 0 && accounts.every(a => a.creator && a.name && a.lastPostDate);
   const inWizard = accounts.length === 0;
+
+  function suggestStagger(N, K) {
+    if (N < 2 || K < 2) return null;
+    let bestS = null;
+    let bestGaps = null;
+    for (let S = 1; S < N; S++) {
+      const offsets = [];
+      for (let k = 0; k < K; k++) offsets.push((k * S) % N);
+      if (new Set(offsets).size < K) continue;
+      const gaps = [];
+      for (let k = 1; k < K; k++) {
+        const d = (offsets[k] - offsets[0] + N) % N;
+        gaps.push(Math.min(d, N - d));
+      }
+      if (bestGaps === null) {
+        bestS = S;
+        bestGaps = gaps;
+      } else {
+        let better = false;
+        for (let i = 0; i < gaps.length; i++) {
+          if (gaps[i] > bestGaps[i]) { better = true; break; }
+          if (gaps[i] < bestGaps[i]) { break; }
+        }
+        if (better) {
+          bestS = S;
+          bestGaps = gaps;
+        }
+      }
+    }
+    return bestS;
+  }
+
+  useEffect(() => {
+    if (!loaded || staggerOverridden) return;
+    const N = hooks.length;
+    const K = accounts.length;
+    if (N < 2 || K < 2) return;
+    const suggested = suggestStagger(N, K);
+    if (suggested !== null && suggested !== staggerDays) {
+      setStaggerDays(suggested);
+    }
+  }, [hooks.length, accounts.length, staggerOverridden, loaded]);
 
   const addHook = () => setHooks(p => [...p, {
     id: '',
@@ -355,7 +421,16 @@ function App() {
       return a[2].localeCompare(b[2]);
     });
 
-    let tsv = rows.map(r => r.join('\t')).join('\n');
+    const tsvEscape = (v) => {
+      if (v == null || v === '') return '';
+      const s = String(v);
+      if (/[\n\r\t"]/.test(s)) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    };
+
+    let tsv = rows.map(r => r.map(tsvEscape).join('\t')).join('\n');
     if (includeHeaders) tsv = COLUMN_HEADERS.join('\t') + '\n' + tsv;
     setOutput(tsv);
   };
@@ -452,11 +527,36 @@ function App() {
                       <Info size={11} />
                     </button>
                   </label>
-                  <input type="number" min="0" value={staggerDays} onChange={e => setStaggerDays(parseInt(e.target.value) || 0)} />
+                  <input
+                    type="number"
+                    min="0"
+                    value={staggerDays}
+                    onChange={e => {
+                      setStaggerDays(parseInt(e.target.value) || 0);
+                      setStaggerOverridden(true);
+                    }}
+                  />
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '4px', minHeight: '14px' }}>
+                    {staggerOverridden ? (
+                      <span>
+                        Manual ·{' '}
+                        <button
+                          onClick={() => setStaggerOverridden(false)}
+                          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+                        >
+                          Reset to auto
+                        </button>
+                      </span>
+                    ) : (hooks.length >= 2 && accounts.length >= 2) ? (
+                      <span>Auto · {hooks.length} hooks × {accounts.length} accts</span>
+                    ) : (
+                      <span style={{ fontStyle: 'italic' }}>Auto-sets when hooks added</span>
+                    )}
+                  </div>
                 </div>
                 {showStaggerInfo && (
                   <div className="info-box" style={{ fontSize: '11px', padding: '8px' }}>
-                    Stagger shifts each account's hook cycle by this many days. With 7 hooks and stagger 4, Account 2 starts with H5 (shifted 4) instead of H1. Use a value smaller than your hook count (and not a multiple of it).
+                    <strong>Auto-set:</strong> Stagger is automatically picked based on your hook and account counts to maximize the gap between Account 1 (main) and Account 2, where audience overlap is highest. You can still override the value manually if needed — click the field and type a new number.
                   </div>
                 )}
                 <div>
@@ -664,13 +764,18 @@ function App() {
             const isCollapsed = collapsedHooks[hi];
             return (
               <div key={hi} className="card p-4 mb-3">
-                <div className="flex items-center gap-3 mb-3">
-                  <button onClick={() => setCollapsedHooks(c => ({ ...c, [hi]: !c[hi] }))} className="btn-icon">
+                <div className="flex gap-3 mb-3" style={{ alignItems: 'flex-start' }}>
+                  <button onClick={() => setCollapsedHooks(c => ({ ...c, [hi]: !c[hi] }))} className="btn-icon" style={{ marginTop: '8px' }}>
                     {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                   </button>
-                  <input type="text" value={hook.id} onChange={e => updateHook(hi, 'id', e.target.value)} placeholder="ID" style={{ width: '90px', flexShrink: 0 }} />
-                  <input type="text" value={hook.text} onChange={e => updateHook(hi, 'text', e.target.value)} placeholder="Hook text..." style={{ flex: 1 }} />
-                  <button onClick={() => removeHook(hi)} className="btn-icon" title="Remove hook">
+                  <input type="text" value={hook.id} onChange={e => updateHook(hi, 'id', e.target.value)} placeholder="ID" style={{ width: '90px', flexShrink: 0, marginTop: '0' }} />
+                  <AutoTextarea
+                    value={hook.text}
+                    onChange={e => updateHook(hi, 'text', e.target.value)}
+                    placeholder="Hook text... (Enter for new line)"
+                    style={{ flex: 1 }}
+                  />
+                  <button onClick={() => removeHook(hi)} className="btn-icon" title="Remove hook" style={{ marginTop: '8px' }}>
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -693,7 +798,7 @@ function App() {
                     </div>
                     <div className="mb-4">
                       <label className="label">Caption</label>
-                      <div className="flex gap-2" style={{ alignItems: 'center' }}>
+                      <div className="flex gap-2" style={{ alignItems: 'flex-start' }}>
                         <select
                           value={hook.captionMode || 'same'}
                           onChange={e => {
@@ -717,11 +822,10 @@ function App() {
                           <option value="separate">Separate per account</option>
                         </select>
                         {(hook.captionMode || 'same') === 'same' ? (
-                          <input
-                            type="text"
+                          <AutoTextarea
                             value={hook.caption}
                             onChange={e => updateHook(hi, 'caption', e.target.value)}
-                            placeholder="optional"
+                            placeholder="optional (Enter for new line)"
                             style={{ flex: 1 }}
                           />
                         ) : (
@@ -760,8 +864,12 @@ function App() {
                                   <input type="text" value={hook.perAccount[ai]?.sound || ''} onChange={e => updatePA(hi, ai, 'sound', e.target.value)} placeholder="e.g. 1" />
                                 </td>
                                 {(hook.captionMode || 'same') === 'separate' && (
-                                  <td style={{ padding: '4px 0' }}>
-                                    <input type="text" value={hook.perAccount[ai]?.caption || ''} onChange={e => updatePA(hi, ai, 'caption', e.target.value)} placeholder="caption for this account" />
+                                  <td style={{ padding: '4px 0', verticalAlign: 'top' }}>
+                                    <AutoTextarea
+                                      value={hook.perAccount[ai]?.caption || ''}
+                                      onChange={e => updatePA(hi, ai, 'caption', e.target.value)}
+                                      placeholder="caption for this account"
+                                    />
                                   </td>
                                 )}
                               </tr>
