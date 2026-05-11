@@ -167,7 +167,7 @@ function App() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [collapsedHooks, setCollapsedHooks] = useState({});
-  const [showStaggerInfo, setShowStaggerInfo] = useState(false);
+  const [showStaggerInfo, setShowStaggerInfo] = useState(true);
   const [creators, setCreators] = useState(['Sydney', 'Nora', 'Violet']);
   const [creatorAccounts, setCreatorAccounts] = useState({
     Sydney: ['sydney.tayylorr', 'sydneytbby', 'petitemomsydney'],
@@ -883,6 +883,32 @@ function App() {
               </div>
             );
           })}
+          {hooks.length > 0 && (
+            <button
+              onClick={addHook}
+              style={{
+                width: '100%',
+                padding: '14px',
+                background: 'transparent',
+                border: '2px dashed var(--border-strong)',
+                borderRadius: '8px',
+                color: 'var(--muted)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: '14px',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.color = 'var(--muted)'; }}
+            >
+              <Plus size={16} /> Add Hook #{hooks.length + 1}
+            </button>
+          )}
         </section>
 
         <div className="flex justify-center mb-8">
