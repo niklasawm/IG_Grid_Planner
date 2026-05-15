@@ -121,6 +121,8 @@ const ChevronUp = (p) => <Icon {...p}><polyline points="18 15 12 9 6 15"/></Icon
 const FileText = (p) => <Icon {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></Icon>;
 const Info = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></Icon>;
 const Grid = (p) => <Icon {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></Icon>;
+const Clock = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+const Save = (p) => <Icon {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></Icon>;
 const Users = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
 const PanelLeftOpen = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></Icon>;
 const PanelLeftClose = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></Icon>;
@@ -133,6 +135,8 @@ const COLUMN_HEADERS = [
 ];
 
 const STORAGE_KEY = 'awm-reels-planner-v1';
+const VERSIONS_KEY = 'awm-reels-planner-versions';
+const MAX_VERSIONS = 30;
 
 function AutoTextarea({ value, onChange, placeholder, disabled, style, minHeight = 38 }) {
   const ref = useRef(null);
@@ -181,6 +185,8 @@ function App() {
   const [showManageAccounts, setShowManageAccounts] = useState(false);
   const [currentView, setCurrentView] = useState('planner');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [versions, setVersions] = useState([]);
+  const [savedFlash, setSavedFlash] = useState(false);
   const [wizardCreator, setWizardCreator] = useState('');
   const [wizardCount, setWizardCount] = useState(3);
   const [staggerOverridden, setStaggerOverridden] = useState(false);
@@ -210,6 +216,25 @@ function App() {
     const state = { staggerDays, includeHeaders, dateFormat, accounts, hooks, creators, creatorAccounts, staggerOverridden };
     window.storage.set(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
   }, [staggerDays, includeHeaders, dateFormat, accounts, hooks, creators, creatorAccounts, staggerOverridden, loaded]);
+
+  // Load versions
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get(VERSIONS_KEY);
+        if (r?.value) {
+          const v = JSON.parse(r.value);
+          if (Array.isArray(v)) setVersions(v);
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  // Save versions when changed
+  useEffect(() => {
+    if (!loaded) return;
+    window.storage.set(VERSIONS_KEY, JSON.stringify(versions)).catch(() => {});
+  }, [versions, loaded]);
 
   useEffect(() => {
     setHooks(prev => prev.map(h => ({
@@ -270,8 +295,92 @@ function App() {
     setOutput('');
   };
 
+  const detectCreator = (accs) => {
+    if (!accs || accs.length === 0) return 'Empty session';
+    const cs = [...new Set(accs.map(a => a.creator).filter(Boolean))];
+    if (cs.length === 0) return 'No creator';
+    if (cs.length === 1) return cs[0];
+    return 'Mixed (' + cs.join(', ') + ')';
+  };
+
+  const buildSnapshot = (label = '') => ({
+    id: Date.now() + Math.random(),
+    savedAt: new Date().toISOString(),
+    label,
+    creator: detectCreator(accounts),
+    accountCount: accounts.length,
+    hookCount: hooks.length,
+    data: {
+      accounts: JSON.parse(JSON.stringify(accounts)),
+      hooks: JSON.parse(JSON.stringify(hooks)),
+      output,
+      staggerDays,
+      staggerOverridden
+    }
+  });
+
+  const saveCurrentAsVersion = (label = '') => {
+    if (accounts.length === 0 && hooks.length === 0) return null;
+    const snap = buildSnapshot(label);
+    setVersions(prev => [snap, ...prev].slice(0, MAX_VERSIONS));
+    return snap;
+  };
+
+  const saveCheckpoint = () => {
+    if (accounts.length === 0 && hooks.length === 0) {
+      window.alert('Nothing to save — add accounts or hooks first.');
+      return;
+    }
+    const label = window.prompt('Optional note for this checkpoint (e.g. "Sydney week 2"):', '') || '';
+    saveCurrentAsVersion(label.trim());
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1500);
+  };
+
+  const restoreVersion = (versionId) => {
+    const v = versions.find(x => x.id === versionId);
+    if (!v) return;
+    const hasCurrentWork = accounts.length > 0 || hooks.length > 0;
+    if (hasCurrentWork) {
+      if (!window.confirm('Restoring will replace your current session. Save the current session to history first?\n\nOK = Save current, then restore\nCancel = Restore without saving')) {
+        // Just restore
+      } else {
+        saveCurrentAsVersion('Auto-saved before restore');
+      }
+    }
+    setAccounts(v.data.accounts || []);
+    setHooks(v.data.hooks || []);
+    setOutput(v.data.output || '');
+    setStaggerDays(v.data.staggerDays ?? 4);
+    setStaggerOverridden(v.data.staggerOverridden ?? false);
+    setCollapsedHooks({});
+    setCurrentView('planner');
+  };
+
+  const deleteVersion = (versionId) => {
+    const v = versions.find(x => x.id === versionId);
+    if (!v) return;
+    if (!window.confirm(`Delete the version from ${formatVersionDate(v.savedAt)} (${v.creator}, ${v.accountCount} accounts × ${v.hookCount} hooks)?`)) return;
+    setVersions(prev => prev.filter(x => x.id !== versionId));
+  };
+
+  const formatVersionDate = (iso) => {
+    try {
+      const d = new Date(iso);
+      const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      return `${date} at ${time}`;
+    } catch { return iso; }
+  };
+
   const resetSession = () => {
-    if (!window.confirm('Reset this session? Accounts, hooks, and output will be cleared so you can start fresh for the next creator. Your directory of creators stays untouched.')) return;
+    const hasWork = accounts.length > 0 || hooks.length > 0;
+    if (hasWork) {
+      if (!window.confirm('Reset this session? The current work will be auto-saved to Version History so you can restore it later. Continue?')) return;
+      saveCurrentAsVersion('Auto-saved before reset');
+    } else {
+      if (!window.confirm('Reset this session?')) return;
+    }
     setAccounts([]);
     setHooks([]);
     setOutput('');
@@ -480,7 +589,8 @@ function App() {
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {[
             { id: 'planner', label: 'IG Grid Planner', Icon: Grid },
-            { id: 'manage', label: 'Manage Directory', Icon: Users }
+            { id: 'manage', label: 'Manage Directory', Icon: Users },
+            { id: 'history', label: 'Version History', Icon: Clock }
           ].map(item => {
             const active = currentView === item.id;
             return (
@@ -581,16 +691,40 @@ function App() {
               <div><strong style={{ color: 'var(--accent)' }}>{accounts.filter(a => a.lastPostDate).length * hooks.length}</strong> rows on generate</div>
             </div>
 
-            <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
+            <div style={{ marginTop: 'auto', paddingTop: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                onClick={saveCheckpoint}
+                disabled={accounts.length === 0 && hooks.length === 0}
+                className="btn-secondary"
+                style={{
+                  width: '100%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: savedFlash ? 'var(--accent-bg)' : undefined,
+                  color: savedFlash ? 'var(--accent)' : undefined,
+                  borderColor: savedFlash ? 'var(--accent-soft)' : undefined,
+                  transition: 'all 0.15s'
+                }}
+                title="Save current session to history as a checkpoint"
+              >
+                <Save size={14} /> {savedFlash ? 'Saved!' : 'Save checkpoint'}
+              </button>
               <button
                 onClick={resetSession}
                 disabled={accounts.length === 0 && hooks.length === 0}
                 className="btn-secondary"
                 style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                title="Clear accounts, hooks, and output"
+                title="Auto-saves to history, then clears the session"
               >
                 <RotateCcw size={14} /> Reset session
               </button>
+              {versions.length > 0 && (
+                <div style={{ fontSize: '11px', color: 'var(--muted)', textAlign: 'center', marginTop: '4px' }}>
+                  {versions.length} version{versions.length !== 1 ? 's' : ''} in history
+                </div>
+              )}
             </div>
           </>
         )}
@@ -764,6 +898,15 @@ function App() {
             const isCollapsed = collapsedHooks[hi];
             return (
               <div key={hi} className="card p-4 mb-3">
+                <div className="font-display" style={{
+                  color: 'var(--accent)',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  marginBottom: '10px',
+                  letterSpacing: '0.01em'
+                }}>
+                  Hook #{hi + 1}
+                </div>
                 <div className="flex gap-3 mb-3" style={{ alignItems: 'flex-start' }}>
                   <button onClick={() => setCollapsedHooks(c => ({ ...c, [hi]: !c[hi] }))} className="btn-icon" style={{ marginTop: '8px' }}>
                     {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
@@ -1060,6 +1203,55 @@ function App() {
               </div>
             )}
           </div>
+        </section>
+      </>)}
+
+      {currentView === 'history' && (<>
+        <div className="mb-8 pb-6 border-b">
+          <h1 className="font-display" style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: '36px', lineHeight: 1.1 }}>Version History</h1>
+          <p className="mt-2" style={{ color: 'var(--muted)', fontSize: '15px' }}>
+            Past sessions saved as checkpoints or auto-saved when you reset. Click Restore to load one back into the planner.
+          </p>
+        </div>
+
+        <section className="mb-8">
+          <div className="info-box mb-4">
+            <strong>How this works:</strong> Sessions are auto-saved when you click Reset. You can also save a checkpoint manually anytime from the sidebar. Restoring a version loads it into the planner; if you have unsaved work, you'll be asked whether to save it first. Up to {MAX_VERSIONS} versions are kept; oldest are dropped after that.
+          </div>
+
+          {versions.length === 0 ? (
+            <div className="card p-6 text-center" style={{ color: 'var(--muted)' }}>
+              No saved versions yet. Click <strong>Save checkpoint</strong> in the sidebar to manually save the current session, or click <strong>Reset session</strong> to auto-save before clearing.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {versions.map(v => (
+                <div key={v.id} className="card p-4">
+                  <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>
+                        {v.creator}
+                        {v.label && (
+                          <span style={{ fontWeight: 400, color: 'var(--muted)', fontSize: '13px', marginLeft: '8px' }}>· {v.label}</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                        {formatVersionDate(v.savedAt)} · {v.accountCount} account{v.accountCount !== 1 ? 's' : ''} · {v.hookCount} hook{v.hookCount !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => restoreVersion(v.id)} className="btn-primary" style={{ padding: '8px 14px', fontSize: '13px' }}>
+                        Restore
+                      </button>
+                      <button onClick={() => deleteVersion(v.id)} className="btn-icon" title="Delete this version">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </>)}
 
